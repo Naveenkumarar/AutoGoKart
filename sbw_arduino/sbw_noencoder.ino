@@ -49,11 +49,23 @@ float encoder_value = 0;
 int spr = 4000;
 
 float prev = 0;
+float angle = 0.0;
+
+float map_val(float value, int spr){
+  
+  float leftspan = 360.0;
+  float rightspan = float(spr);
+  float valueScaled = value / leftspan;
+  return valueScaled * rightspan;
+  
+}
 
 void subscription_callback(const void * msgin){
 
-  const geometry_msgs__msg__PointStamped * msg = (const geometry_msgs__msg__PointStamped *)msgin;
-  float angle = msg->point.x;
+  const geometry_msgs__msg__PointStamped * msg_in = (const geometry_msgs__msg__PointStamped *)msgin;
+   float rad_angle = msg_in->point.x;
+  angle = rad_angle * 57296/1000;
+  angle = angle * 3;
 
   if(prev != angle)
   {
@@ -73,7 +85,7 @@ void subscription_callback(const void * msgin){
     else
       digitalWrite(DIR_PIN,LOW);
       
-    int step_input = map(abs(angle),0,360,0,spr);
+    int step_input = int(map_val(abs(angle),spr));
     
     for (int i=0;i<step_input;i++){
     digitalWrite(STEP_PIN,HIGH);
@@ -82,7 +94,17 @@ void subscription_callback(const void * msgin){
     delayMicroseconds(1000);
     
     }
+
+      msg.data = angle;
+//  Serial.println(msg.data);     
+    RCSOFTCHECK(rcl_publish(&publisher, &msg, NULL));
+
+    msg.data = float(step_input);
+//  Serial.println(msg.data);     
+    RCSOFTCHECK(rcl_publish(&publisher, &msg, NULL));
+    
   }
+
 }
 
 void setup() {
@@ -93,10 +115,26 @@ void setup() {
 
   allocator = rcl_get_default_allocator();
 
-  RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
+//  RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
+//
+//  RCCHECK(rclc_node_init_default(&node, "sbw", "", &support));
+
+
+size_t domain_id = 5;
+  
+  rcl_init_options_t init_options = rcl_get_zero_initialized_init_options();
+  RCCHECK(rcl_init_options_init(&init_options,allocator));
+  
+  RCCHECK(rcl_init_options_set_domain_id(&init_options,domain_id));
+  
+  // create init_options
+  
+  RCCHECK(rclc_support_init_with_options(&support, 0, NULL, &init_options, &allocator));
+
+  // create node
+  rcl_node_options_t node_ops = rcl_node_get_default_options();
 
   RCCHECK(rclc_node_init_default(&node, "sbw", "", &support));
-
   RCCHECK(rclc_publisher_init_default(
     &publisher,
     &node,
@@ -123,9 +161,7 @@ void setup() {
 
 
 void loop() {
-  msg.data = 1.0;
-  Serial.println(msg.data);     
-    RCSOFTCHECK(rcl_publish(&publisher, &msg, NULL));
+  
 
 
     RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100)));
